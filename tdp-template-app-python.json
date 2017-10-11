@@ -1,0 +1,293 @@
+{
+    "apiVersion": "v1",
+    "kind": "Template",
+    "labels": {
+        "template": "tdp-template-app-python"
+    },
+    "message": "A message",
+    "metadata": {
+        "annotations": {
+            "description": "A description",
+            "iconClass": "icon-python",
+            "tags": "instant-app,python"
+        },
+        "name": "tdp-app-python"
+    },
+    "objects": [{
+            "apiVersion": "v1",
+            "kind": "Service",
+            "metadata": {
+                "annotations": {},
+                "labels": {
+                    "tdp.telstra.io/project": "${PROJECT_NAME}",
+                    "tdp.telstra.io/application": "${APPLICATION_NAME}"
+                },
+                "name": "${RUNTIME_SERVICE_NAME}"
+            },
+            "spec": {
+                "ports": [{
+                    "name": "web",
+                    "port": 8080,
+                    "targetPort": 8080
+                }],
+                "selector": {
+                    "name": "${RUNTIME_SERVICE_NAME}"
+                }
+            }
+        },
+        {
+            "apiVersion": "v1",
+            "kind": "Route",
+            "metadata": {
+                "labels": {
+                    "tdp.telstra.io/project": "${PROJECT_NAME}",
+                    "tdp.telstra.io/application": "${APPLICATION_NAME}"
+                },
+                "name": "${APPLICATION_NAME}"
+            },
+            "spec": {
+                "host": "${APPLICATION_DOMAIN}",
+                "to": {
+                    "kind": "Service",
+                    "name": "${RUNTIME_SERVICE_NAME}"
+                }
+            }
+        },
+        {
+            "apiVersion": "v1",
+            "kind": "ImageStream",
+            "metadata": {
+                "annotations": {
+                    "description": "Keeps track of changes in the application runtime service image"
+                },
+                "labels": {
+                    "tdp.telstra.io/project": "${PROJECT_NAME}",
+                    "tdp.telstra.io/application": "${APPLICATION_NAME}"
+                },
+                "name": "${RUNTIME_SERVICE_NAME}"
+            }
+        },
+        {
+            "apiVersion": "v1",
+            "kind": "BuildConfig",
+            "metadata": {
+                "annotations": {
+                    "description": "Defines how to build the application runtime service"
+                },
+                "labels": {
+                    "tdp.telstra.io/project": "${PROJECT_NAME}",
+                    "tdp.telstra.io/application": "${APPLICATION_NAME}",
+                    "template": "tdp-template-app-python" 
+                },
+                "name": "${RUNTIME_SERVICE_NAME}"
+            },
+            "spec": {
+                "output": {
+                    "to": {
+                        "kind": "ImageStreamTag",
+                        "name": "${RUNTIME_SERVICE_NAME}:latest"
+                    }
+                },
+                "source": {
+                    "contextDir": "${CONTEXT_DIR}",
+                    "git": {
+                        "ref": "${SOURCE_REPOSITORY_REF}",
+                        "uri": "${SOURCE_REPOSITORY_URL}"
+                    },
+                    "type": "Git"
+                },
+                "strategy": {
+                    "sourceStrategy": {
+                        "env": [{
+                            "name": "NPM_MIRROR",
+                            "value": "${NPM_MIRROR}"
+                        }],
+                        "from": {
+                            "kind": "ImageStreamTag",
+                            "name": "python:3.5",
+                            "namespace": "${NAMESPACE}"
+                        }
+                    },
+                    "type": "Source"
+                },
+                "triggers": [{
+                        "github": {
+                            "secret": "${GITHUB_WEBHOOK_SECRET}"
+                        },
+                        "type": "GitHub"
+                    },
+                    {
+                        "generic": {
+                            "secret": "${GENERIC_WEBHOOK_SECRET}"
+                        },
+                        "type": "Generic"
+                    }
+                ]
+            }
+        },
+        {
+            "apiVersion": "v1",
+            "kind": "DeploymentConfig",
+            "metadata": {
+                "annotations": {
+                    "description": "Defines how to deploy the application runtime service"
+                },
+                "labels": {
+                    "tdp.telstra.io/project": "${PROJECT_NAME}",
+                    "tdp.telstra.io/application": "${APPLICATION_NAME}"
+                },
+                "name": "${RUNTIME_SERVICE_NAME}"
+            },
+            "spec": {
+                "replicas": 1,
+                "selector": {
+                    "name": "${RUNTIME_SERVICE_NAME}"
+                },
+                "strategy": {
+                    "type": "Rolling"
+                },
+                "template": {
+                    "metadata": {
+                        "labels": {
+                            "app": "${APPLICATION_NAME}",
+                            "name": "${RUNTIME_SERVICE_NAME}",
+                            "tdp.telstra.io/project": "${PROJECT_NAME}",
+                            "tdp.telstra.io/application": "${APPLICATION_NAME}",
+                            "tdp.telstra.io/service": "${RUNTIME_SERVICE_NAME}",
+                            "tdp.telstra.io/service-type": "Runtime"
+                        },
+                        "name": "${RUNTIME_SERVICE_NAME}"
+                    },
+                    "spec": {
+                        "containers": [{
+                            "image": " ",
+                            "livenessProbe": {
+                                "httpGet": {
+                                    "path": "/pagecount",
+                                    "port": 8080
+                                },
+                                "initialDelaySeconds": 30,
+                                "timeoutSeconds": 3
+                            },
+                            "name": "python-${RUNTIME_SERVICE_NAME}",
+                            "ports": [{
+                                "containerPort": 8080
+                            }],
+                            "readinessProbe": {
+                                "httpGet": {
+                                    "path": "/pagecount",
+                                    "port": 8080
+                                },
+                                "initialDelaySeconds": 3,
+                                "timeoutSeconds": 3
+                            },
+                            "resources": {
+                                "limits": {
+                                    "cpu": "${CPU_MILICORES_LIMIT}",
+                                    "memory": "${MEMORY_LIMIT}"
+                                }
+                            }
+                        }]
+                    }
+                },
+                "triggers": [{
+                        "imageChangeParams": {
+                            "automatic": false,
+                            "containerNames": [
+                                "python-${RUNTIME_SERVICE_NAME}"
+                            ],
+                            "from": {
+                                "kind": "ImageStreamTag",
+                                "name": "${RUNTIME_SERVICE_NAME}:latest"
+                            }
+                        },
+                        "type": "ImageChange"
+                    },
+                    {
+                        "type": "ConfigChange"
+                    }
+                ]
+            }
+        }
+    ],
+    "parameters": [{
+            "description": "PROJECT_NAME param decription.",
+            "displayName": "Project Name",
+            "name": "PROJECT_NAME",
+            "required": true
+        },
+        {
+            "description": "APPLICATION_NAME param decription.",
+            "displayName": "Application Name",
+            "name": "APPLICATION_NAME",
+            "required": true
+        },
+        {
+            "description": "RUNTIME_SERVICE_NAME param decription.",
+            "displayName": "Project Name",
+            "name": "RUNTIME_SERVICE_NAME",
+            "required": true
+        },
+        {
+            "description": "The exposed hostname that will route to the Python service, if left blank a value will be defaulted.",
+            "displayName": "Application Hostname",
+            "name": "APPLICATION_DOMAIN"
+        },
+        {
+            "description": "The URL of the repository with your application source code.",
+            "displayName": "Git Repository URL",
+            "name": "SOURCE_REPOSITORY_URL",
+            "required": true
+        },
+        {
+            "description": "Maximum amount of memory the Python container can use.",
+            "displayName": "Memory Limit",
+            "name": "MEMORY_LIMIT",
+            "required": true,
+            "value": "512Mi"
+        },
+        {
+            "description": "Maximum amount of cpu milicores the Python container can use.",
+            "displayName": "CPU Milicores Limit",
+            "name": "CPU_MILICORES_LIMIT",
+            "required": true,
+            "value": "100m"
+        },
+        {
+            "description": "Set this to a branch name, tag or other ref of your repository if you are not using the default branch.",
+            "displayName": "Git Reference",
+            "name": "SOURCE_REPOSITORY_REF"
+        },
+        {
+            "description": "Set this to the relative path to your project if it is not in the root of your repository.",
+            "displayName": "Context Directory",
+            "name": "CONTEXT_DIR"
+        },
+        {
+            "description": "A secret string used to configure the GitHub webhook.",
+            "displayName": "GitHub Webhook Secret",
+            "from": "[a-zA-Z0-9]{40}",
+            "generate": "expression",
+            "name": "GITHUB_WEBHOOK_SECRET"
+        },
+        {
+            "description": "A secret string used to configure the Generic webhook.",
+            "displayName": "Generic Webhook Secret",
+            "from": "[a-zA-Z0-9]{40}",
+            "generate": "expression",
+            "name": "GENERIC_WEBHOOK_SECRET"
+        },
+        {
+            "description": "The custom NPM mirror URL",
+            "displayName": "Custom NPM Mirror URL",
+            "name": "NPM_MIRROR"
+        },
+        {
+            "description": "The OpenShift Namespace where the Python ImageStreams reside.",
+            "displayName": "Namespace",
+            "name": "NAMESPACE",
+            "required": true,
+            "value": "openshift"
+        }
+    ]
+}
